@@ -5,3 +5,4 @@
 
 ## 脚本使用说明
 * *nodejs_env_setup.sh*---------一键部署nodejs环境，执行方式: sh nodejs_env_setup.sh
+* *mongodb_env_setup.sh*--------一键部署mongodb环境，执行方式: sh mongodb_env_setup.sh
