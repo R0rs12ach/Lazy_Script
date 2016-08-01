@@ -108,4 +108,171 @@ def use_setuptools(
             print >>sys.stderr, (
             "The required version of setuptools (>=%s) is not available, and\n"
             "can't be installed while this script is running. Please install\n"
-            " a more recent version first, using 'easy_install 
+            " a more recent version first, using 'easy_install -U setuptools'."
+            "\n\n(Currently using %r)"
+            ) % (version, e.args[0])
+            sys.exit(2)
+    except pkg_resources.DistributionNotFound:
+        pass
+
+    del pkg_resources, sys.modules['pkg_resources']    # reload ok
+    return do_download()
+
+def download_setuptools(
+    version=DEFAULT_VERSION, download_base=DEFAULT_URL, to_dir=os.curdir,
+    delay = 15
+):
+    """Download setuptools from a specified location and return its filename
+
+    `version` should be a valid setuptools version number that is available
+    as an egg for download under the `download_base` URL (which should end
+    with a '/'). `to_dir` is the directory where the egg will be downloaded.
+    `delay` is the number of seconds to pause before an actual download attempt.
+    """
+    import urllib2, shutil
+    egg_name = "setuptools-%s-py%s.egg" % (version,sys.version[:3])
+    url = download_base + egg_name
+    saveto = os.path.join(to_dir, egg_name)
+    src = dst = None
+    if not os.path.exists(saveto):  # Avoid repeated downloads
+        try:
+            from distutils import log
+            if delay:
+                log.warn("""
+---------------------------------------------------------------------------
+This script requires setuptools version %s to run (even to display
+help).  I will attempt to download it for you (from
+%s), but
+you may need to enable firewall access for this script first.
+I will start the download in %d seconds.
+
+(Note: if this machine does not have network access, please obtain the file
+
+   %s
+
+and place it in this directory before rerunning this script.)
+---------------------------------------------------------------------------""",
+                    version, download_base, delay, url
+                ); from time import sleep; sleep(delay)
+            log.warn("Downloading %s", url)
+            src = urllib2.urlopen(url)
+            # Read/write all in one block, so we don't create a corrupt file
+            # if the download is interrupted.
+            data = _validate_md5(egg_name, src.read())
+            dst = open(saveto,"wb"); dst.write(data)
+        finally:
+            if src: src.close()
+            if dst: dst.close()
+    return os.path.realpath(saveto)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+def main(argv, version=DEFAULT_VERSION):
+    """Install or upgrade setuptools and EasyInstall"""
+    try:
+        import setuptools
+    except ImportError:
+        egg = None
+        try:
+            egg = download_setuptools(version, delay=0)
+            sys.path.insert(0,egg)
+            from setuptools.command.easy_install import main
+            return main(list(argv)+[egg])   # we're done here
+        finally:
+            if egg and os.path.exists(egg):
+                os.unlink(egg)
+    else:
+        if setuptools.__version__ == '0.0.1':
+            print >>sys.stderr, (
+            "You have an obsolete version of setuptools installed.  Please\n"
+            "remove it from your system entirely before rerunning this script."
+            )
+            sys.exit(2)
+
+    req = "setuptools>="+version
+    import pkg_resources
+    try:
+        pkg_resources.require(req)
+    except pkg_resources.VersionConflict:
+        try:
+            from setuptools.command.easy_install import main
+        except ImportError:
+            from easy_install import main
+        main(list(argv)+[download_setuptools(delay=0)])
+        sys.exit(0) # try to force an exit
+    else:
+        if argv:
+            from setuptools.command.easy_install import main
+            main(argv)
+        else:
+            print "Setuptools version",version,"or greater has been installed."
+            print '(Run "ez_setup.py -U setuptools" to reinstall or upgrade.)'
+
+def update_md5(filenames):
+    """Update our built-in md5 registry"""
+
+    import re
+
+    for name in filenames:
+        base = os.path.basename(name)
+        f = open(name,'rb')
+        md5_data[base] = md5(f.read()).hexdigest()
+        f.close()
+
+    data = ["    %r: %r,\n" % it for it in md5_data.items()]
+    data.sort()
+    repl = "".join(data)
+
+    import inspect
+    srcfile = inspect.getsourcefile(sys.modules[__name__])
+    f = open(srcfile, 'rb'); src = f.read(); f.close()
+
+    match = re.search("\nmd5_data = {\n([^}]+)}", src)
+    if not match:
+        print >>sys.stderr, "Internal error!"
+        sys.exit(2)
+
+    src = src[:match.start(1)] + repl + src[match.end(1):]
+    f = open(srcfile,'w')
+    f.write(src)
+    f.close()
+
+
+if __name__=='__main__':
+    if len(sys.argv)>2 and sys.argv[1]=='--md5update':
+        update_md5(sys.argv[2:])
+    else:
+        main(sys.argv[1:])
